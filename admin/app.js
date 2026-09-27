@@ -196,7 +196,7 @@
       <table><thead><tr><th>Vendor</th><th>Status</th><th>Tier</th><th>Balance</th><th>Orders</th><th>Actions</th></tr></thead><tbody>
       ${vb.map((v) => `<tr data-id="${v.vendor_id}">
         <td><b>${esc(v.name)}</b><div class="small">${plus(v.whatsapp_phone)} · ${esc(v.country)}</div></td>
-        <td>${v.is_active ? `<span class="status ${v.is_open ? 'ready' : 'cancelled'}">${v.is_open ? 'Open' : 'Closed'}</span>` : '<span class="status">Inactive</span>'}</td>
+        <td>${v.is_active ? `<span class="status ${v.is_open ? 'ready' : 'cancelled'}">${v.is_open ? 'Switched on' : 'Switched off'}</span>` : '<span class="status">Inactive</span>'}</td>
         <td>${esc(v.tier)}</td>
         <td class="${v.balance_minor < 0 ? 'neg' : 'pos'}">${money(v.balance_minor, v.currency)}</td>
         <td>${v.orders_paid}</td>
@@ -240,10 +240,34 @@
       { name: 'commission_bps', label: 'Commission (bps)', type: 'number', value: v.commission_bps }, { name: 'prep_minutes', label: 'Prep minutes', type: 'number', value: v.prep_minutes },
       { name: 'accept_timeout_min', label: 'Accept window override (min, blank = adaptive)', type: 'number', value: v.accept_timeout_min ?? '' },
       { name: 'booking_credit_minor', label: 'Booking credit override (minor units, blank = country default)', type: 'number', value: v.booking_credit_minor ?? '' },
+      { name: 'min_basket_minor', label: 'Minimum basket override (minor units, blank = country default)', type: 'number', value: v.min_basket_minor ?? '' },
+      { name: 'hours', label: 'Opening hours — one line per day: mon 08:00-21:00, 18:00-02:00 (blank line or missing day = closed; leave all empty = always open when switched on)', type: 'textarea', value: hoursToText(v.hours) },
       { name: 'description', label: 'Description', value: v.description || '' }, { name: 'is_active', label: 'Active (visible to customers)', type: 'checkbox', value: v.is_active }]);
     if (!r) return;
     r.whatsapp_phone = r.whatsapp_phone ? '+' + digits(r.whatsapp_phone) : null;
+    try { r.hours = hoursFromText(r.hours); } catch (e) { return toast(e.message, true); }
     const { error } = await sb.from('vendors').update(r).eq('id', id); if (error) throw error; toast('Saved'); render();
+  }
+  const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+  function hoursToText(h) {
+    if (!h) return '';
+    return DAYS.map((d) => `${d} ${(h[d] || []).map(([a, b]) => `${a}-${b}`).join(', ')}`.trim()).join('\n');
+  }
+  function hoursFromText(text) {
+    const lines = String(text || '').split('\n').map((l) => l.trim()).filter(Boolean);
+    if (!lines.length) return null;
+    const out = {}; DAYS.forEach((d) => out[d] = []);
+    for (const l of lines) {
+      const [day, ...rest] = l.split(/\s+/); const d = day.slice(0, 3).toLowerCase();
+      if (!DAYS.includes(d)) throw new Error(`Unknown day "${day}" — use mon, tue, wed, thu, fri, sat, sun`);
+      const slots = rest.join(' ').split(',').map((x) => x.trim()).filter(Boolean);
+      for (const sl of slots) {
+        const m = sl.match(/^(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})$/);
+        if (!m) throw new Error(`Bad time range "${sl}" on ${d} — use 08:00-21:00`);
+        out[d].push([m[1].padStart(5, '0'), m[2].padStart(5, '0')]);
+      }
+    }
+    return out;
   }
   async function vendorStaff(v) {
     const [{ data: staff }, { data: invites }] = await Promise.all([
@@ -392,6 +416,7 @@
           <label>Payment window (min)<input name="payment_timeout_min" type="number" value="${c.payment_timeout_min}"></label>
           <label>Vendor accept window: default / floor (min)<div class="row"><input name="accept_timeout_min" type="number" value="${c.accept_timeout_min}"><input name="accept_timeout_floor_min" type="number" value="${c.accept_timeout_floor_min}"></div></label>
           <label>Vendor booking credit (minor)<input name="vendor_booking_credit_minor" type="number" value="${c.vendor_booking_credit_minor}"></label>
+          <label>Far delivery: surcharge per km beyond the zone radius (minor) / hard limit (km)<div class="row"><input name="far_surcharge_per_km_minor" type="number" value="${c.far_surcharge_per_km_minor}"><input name="far_max_km" type="number" step="0.5" value="${c.far_max_km}"></div></label>
           <label>Support WhatsApp<input name="support_whatsapp" value="${esc(c.support_whatsapp || '')}"></label>
           <button class="btn primary block" data-act="save-country" ${isAdmin() ? '' : 'disabled'}>Save</button></div>`).join('')}
       </div>
@@ -425,7 +450,7 @@
     $$('button[data-act=bands]', main).forEach((b) => b.onclick = async () => {
       const z = zones.find((x) => x.id === b.closest('tr').dataset.id); const cur = z.country === 'NG' ? 'NGN' : 'GHS';
       const mine = (bands || []).filter((x) => x.zone_id === z.id);
-      const r = await dialog(`Fee bands — ${z.name}`, [{ name: 'text', label: `One band per line: max_km=fee_${cur} e.g. 2=20`, type: 'textarea', value: mine.map((x) => `${x.max_km}=${x.fee_minor / 100}`).join('\n') }], { okText: 'Replace bands', intro: 'The first band whose max km is ≥ the trip distance sets the fee. Beyond the last band = outside delivery area.' });
+      const r = await dialog(`Fee bands — ${z.name}`, [{ name: 'text', label: `One band per line: max_km=fee_${cur} e.g. 2=20`, type: 'textarea', value: mine.map((x) => `${x.max_km}=${x.fee_minor / 100}`).join('\n') }], { okText: 'Replace bands', intro: 'The first band whose max km is ≥ the trip distance sets the fee. Beyond the last band (up to the country far limit) = last band fee + per-km surcharge, which the customer must accept at checkout.' });
       if (!r) return;
       const rows = r.text.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => { const [km, fee] = l.split('='); return { zone_id: z.id, max_km: Number(km), fee_minor: Math.round(Number(fee) * 100) }; });
       if (rows.some((x) => !(x.max_km > 0) || !(x.fee_minor >= 0))) return toast('Check the format: 2=20', true);
