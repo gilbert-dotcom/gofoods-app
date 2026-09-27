@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GoFoods Ops</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='48' fill='%230B7A4B'/><text x='50' y='66' font-size='52' text-anchor='middle' fill='white' font-family='sans-serif' font-weight='700'>G</text></svg>">
+<link rel="stylesheet" href="styles.css">
+<script>
+  // Filled in at build time by the workflow from env.production.json; the
+  // fallback lets `python3 -m http.server` work locally with a config.js.
+  window.GOFOODS_CONFIG = window.GOFOODS_CONFIG || { url: "__SUPABASE_URL__", anon: "__SUPABASE_ANON_KEY__" };
+</script>
+<script src="config.js" onerror="void 0"></script>
+</head>
+<body>
+<div id="app">
+  <!-- ---------- sign in ---------- -->
+  <section id="login" class="login hidden">
+    <div class="card login-card">
+      <h1><span class="logo">G</span> GoFoods Ops</h1>
+      <p class="muted">Admin and order-desk staff only.</p>
+      <form id="login-form">
+        <label>Phone (with country code)<input id="login-phone" placeholder="+233 24 000 0009" autocomplete="tel" required></label>
+        <div id="login-step2" class="hidden">
+          <label>6-digit code<input id="login-code" inputmode="numeric" maxlength="6" placeholder="123456"></label>
+        </div>
+        <button class="btn primary" id="login-btn" type="submit">Send code</button>
+        <p id="login-error" class="error"></p>
+      </form>
+    </div>
+  </section>
+
+  <!-- ---------- shell ---------- -->
+  <section id="shell" class="shell hidden">
+    <nav class="side">
+      <div class="brand"><span class="logo">G</span> GoFoods Ops</div>
+      <a href="#orders" data-view="orders">🧾 Orders desk <span class="badge" id="badge-orders"></span></a>
+      <a href="#vendors" data-view="vendors">🏪 Vendors</a>
+      <a href="#riders" data-view="riders">🛵 Riders</a>
+      <a href="#customers" data-view="customers">👤 Customers</a>
+      <a href="#money" data-view="money">💰 Money</a>
+      <a href="#settings" data-view="settings">⚙️ Settings</a>
+      <div class="grow"></div>
+      <div class="me"><span id="me-phone"></span><span id="me-role" class="pill"></span></div>
+      <button class="btn ghost" id="signout">Sign out</button>
+    </nav>
+    <main id="main"></main>
+  </section>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+<dialog id="dlg"><form method="dialog" id="dlg-form"></form></dialog>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
